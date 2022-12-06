@@ -31,7 +31,7 @@ def _index_labels(labels):
     return {label: labels.index(label) for label in labels}
 
 
-def _json_to_yolo(dict_address, labels_dict, verbose=0):
+def _json_to_yolo(dict_address, labels_dict, verbose=1):
     files = os.listdir(dict_address)
     yolo_file = []
     for file in files:
@@ -44,10 +44,10 @@ def _json_to_yolo(dict_address, labels_dict, verbose=0):
             objects = data['objects']
             for obj in objects:
                 label_class = labels_dict[obj['label']]
-                x = obj['bbox']['xmin'] / img_width
-                y = obj['bbox']['ymin'] / img_height
                 width = (obj['bbox']['xmax'] - obj['bbox']['xmin']) / img_width
                 height = (obj['bbox']['ymax'] - obj['bbox']['ymin']) / img_height
+                x = (obj['bbox']['xmin'] + width / 2) / img_width
+                y = (obj['bbox']['ymin'] + height / 2) / img_height
                 yolo_file.append(f'{label_class} {x} {y} {width} {height}')
             with open(Path(dict_address) / (file[:-5] + '.txt'), 'w') as fp:
                 for item in yolo_file:
@@ -67,20 +67,19 @@ def config_yaml(address, labels_dict, name='config'):
     yaml_info['nc'] = len(classes)
     yaml_info['names'] = {v: k for k, v in labels_dict.items()}
     print(yaml_info)
-    with open(Path(address)/(name + '.yaml'), 'w') as f:
-        yaml.dump(yaml_info,f,sort_keys=False)
+    with open(Path(address) / (name + '.yaml'), 'w') as f:
+        yaml.dump(yaml_info, f, sort_keys=False)
 
 
 if __name__ == '__main__':
-    dict_address = '../../Datasets/Mapillary Traffic Sign Dataset/Fully Annotated/'
+    dict_address = '../../Datasets/Mapillary Traffic Sign Dataset/Fully Annotated'
     # labels = _extract_json_labels(dict_address, write_flag=True, write_address=dict_address)
     # labels_dict = _index_labels(labels)
     # json_address = '../../Datasets/Mapillary Traffic Sign Dataset/Fully Annotated/classes.json'
     # json_file = json.dumps(labels_dict, indent=4)
-    # with open('../../Datasets/Mapillary Traffic Sign Dataset/Fully Annotated/classes.json', 'w') as outfile:
+    # with open(json_address, 'w') as outfile:
     #     outfile.write(json_file)
-    # _json_to_yolo(dict_address=dict_address, lebels_dict=labels_dict)
-    with open(Path('../../Datasets/Mapillary Traffic Sign Dataset/Fully Annotated/') / 'classes.json', 'r') as f:
+    # _json_to_yolo(dict_address=dict_address, labels_dict=labels_dict)
+    with open(Path('../../../datasets/Mapillary Traffic Sign Dataset/Fully Annotated/') / 'merged_classes.json', 'r') as f:
         data = json.load(f)
-    config_yaml(dict_address,labels_dict=data)
-
+    config_yaml(dict_address, labels_dict=data, name='merged_mapillary')
