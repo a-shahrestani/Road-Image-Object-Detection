@@ -128,6 +128,11 @@ def remove_classes(classes_address, new_classes_address, data_dir, target_dir, c
     with open(classes_address, 'r') as f:
         classes_dict = json.load(f)
     class_codes = [int(classes_dict[class_name]) for class_name in class_names]
+    for name in class_names:
+        classes_dict.pop(name, None)
+    new_classes_dict = {class_name: i for i, class_name in enumerate(classes_dict.keys())}
+    with open(new_classes_address, 'w') as f:
+        json.dump(new_classes_dict, f)
     if not os.path.exists(target_dir):
         os.makedirs(target_dir)
     file_names = get_dir_file_names(address=data_dir)
@@ -139,14 +144,14 @@ def remove_classes(classes_address, new_classes_address, data_dir, target_dir, c
         if len(lines) > 0:
             with open(os.path.join(target_dir, file_name), 'w') as f:
                 for line in lines:
-                    f.write(line)
+                    old_class_code = int(line.split()[0])
+                    new_class_code = new_classes_dict[[k for k, v in classes_dict.items() if v == old_class_code][0]]
+                    f.write(
+                        f'{new_class_code} {line.split()[1]} {line.split()[2]} {line.split()[3]} {line.split()[4]}'
+                        + '\n')
         else:
             empty_files_counter += 1
     print(f'{empty_files_counter} files are empty')
-    for name in class_names:
-        classes_dict.pop(name, None)
-    with open(new_classes_address, 'w') as f:
-        json.dump(classes_dict, f)
 
 
 if __name__ == '__main__':
@@ -174,13 +179,14 @@ if __name__ == '__main__':
     # print(non_existents)
     # get_classes_cvat(classes_address='../../Datasets/Mapillary Traffic Sign Dataset/Fully Annotated/classes.json',
     #                  target_address='../../Datasets/Mapillary Traffic Sign Dataset/Fully Annotated/classes_cvat.json')
-    address = '../../Datasets/Mapillary Traffic Sign Dataset/Fully Annotated/merged_classes.json'
-    new_address = '../../Datasets/Mapillary Traffic Sign Dataset/Fully Annotated/reduced_merged_classes.json'
+    address = '../../../datasets/Mapillary Traffic Sign Dataset/Fully Annotated/merged_classes.json'
+    new_address = '../../../datasets/Mapillary Traffic Sign Dataset/Fully Annotated/reduced_merged_classes.json'
     # merged_classes_address = '../../Datasets/Mapillary Traffic Sign Dataset/Fully Annotated/merged_classes.json'
-    data_dir = '../../../datasets/Mapillary Traffic Sign Dataset/Fully Annotated/labels/validation/'
-    target_dir = '../../Datasets/Mapillary Traffic Sign Dataset/Fully Annotated/labels/validation_reduced/'
+    data_dir = '../../../datasets/Mapillary Traffic Sign Dataset/Fully Annotated/labels/training_merged/'
+    target_dir = '../../../datasets/Mapillary Traffic Sign Dataset/Fully Annotated/labels/training/'
     # target_dir = '../../Datasets/Mapillary Traffic Sign Dataset/Fully Annotated/labels/training_merged/'
     # merge_image_classes(classes_address=address, data_dir=data_dir, target_dir=target_dir,
     #                     merged_classes_address=merged_classes_address)
     # instances = find_class_instances(classes_address=address, data_dir=data_dir)
-    remove_classes(classes_address=address, new_classes_address=new_address, data_dir=data_dir, target_dir=target_dir,class_names=['other-sig'])
+    remove_classes(classes_address=address, new_classes_address=new_address, data_dir=data_dir, target_dir=target_dir,
+                   class_names=['other-sig'])

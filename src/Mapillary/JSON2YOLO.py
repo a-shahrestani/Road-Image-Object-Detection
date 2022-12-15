@@ -72,7 +72,7 @@ def config_yaml(address, labels_dict, name='config'):
 
 
 if __name__ == '__main__':
-    dict_address = '../../Datasets/Mapillary Traffic Sign Dataset/Fully Annotated'
+    dict_address = '../../../Datasets/Mapillary Traffic Sign Dataset/Fully Annotated'
     # labels = _extract_json_labels(dict_address, write_flag=True, write_address=dict_address)
     # labels_dict = _index_labels(labels)
     # json_address = '../../Datasets/Mapillary Traffic Sign Dataset/Fully Annotated/classes.json'
@@ -80,6 +80,6 @@ if __name__ == '__main__':
     # with open(json_address, 'w') as outfile:
     #     outfile.write(json_file)
     # _json_to_yolo(dict_address=dict_address, labels_dict=labels_dict)
-    with open(Path('../../../datasets/Mapillary Traffic Sign Dataset/Fully Annotated/') / 'merged_classes.json', 'r') as f:
+    with open(Path('../../../datasets/Mapillary Traffic Sign Dataset/Fully Annotated/') / 'reduced_merged_classes.json', 'r') as f:
         data = json.load(f)
-    config_yaml(dict_address, labels_dict=data, name='merged_mapillary')
+    config_yaml(dict_address, labels_dict=data, name='reduced_merged_mapillary')
