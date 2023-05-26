@@ -5,13 +5,9 @@ from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.utils.logger import setup_logger
 
 setup_logger()
-import torch
-# import some common libraries
-import numpy as np
 import cv2
 import random
 import matplotlib.pyplot as plt
-# import some common detectron2 utilities
 from detectron2 import model_zoo
 from detectron2.engine import DefaultPredictor
 from detectron2.config import get_cfg
@@ -25,8 +21,12 @@ from detectron2.engine import DefaultTrainer
 from detectron2.evaluation import COCOEvaluator
 
 # Our dataset is in coco format, so we can use the coco api to load it
-register_coco_instances("my_dataset_train", {}, "../datasets/DFG/train.json", "../datasets/DFG/JPEGImages")
-register_coco_instances("my_dataset_val", {}, "../datasets/DFG/test.json", "../datasets/DFG/JPEGImages")
+register_coco_instances("my_dataset_train", {},
+                        "../../../datasets/Yellowstone ATS/Annotations/combined_annotations_train.json",
+                        "../../../datasets/Yellowstone ATS/Images/train")
+register_coco_instances("my_dataset_val", {},
+                        "../../../datasets/Yellowstone ATS/Annotations/combined_annotations_test.json",
+                        "../../../datasets/Yellowstone ATS/Images/test")
 # register_coco_instances("my_dataset_test", {}, "/content/test/_annotations.coco.json", "/content/test")
 print(os.getcwd())
 # visualize training data
@@ -36,11 +36,9 @@ dataset_dicts = DatasetCatalog.get("my_dataset_train")
 
 # import random
 # from detectron2.utils.visualizer import Visualizer
-#
 
 
-def custom_config(num_classes, weight_path = None):
-
+def custom_config(num_classes, weight_path=None):
     cfg = get_cfg()
     cfg.merge_from_file(model_zoo.get_config_file("COCO-Detection/faster_rcnn_R_50_FPN_3x.yaml"))
     cfg.DATASETS.TRAIN = ("my_dataset_train",)
@@ -56,19 +54,17 @@ def custom_config(num_classes, weight_path = None):
     cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE = 128
     cfg.MODEL.ROI_HEADS.NUM_CLASSES = num_classes
 
-
-    cfg.SOLVER.IMS_PER_BATCH = 8 # Images per batch - basically on your Batch size
+    cfg.SOLVER.IMS_PER_BATCH = 8  # Images per batch - basically on your Batch size
     cfg.SOLVER.BASE_LR = 0.02
-    cfg.SOLVER.MAX_ITER = 20000
-    cfg.SOLVER.WARMUP_ITERS = 1000
+    cfg.SOLVER.MAX_ITER = 50000
+    cfg.SOLVER.WARMUP_ITERS = 2000
     # cfg.SOLVER.STEPS = (100, 1000, 5000)
     # cfg.SOLVER.GAMMA = 0.05
 
     cfg.INPUT.MIN_SIZE_TRAIN = (800,)
-    cfg.OUTPUT_DIR = './output/faster-rcnn/r50-fpn-3x/test2/'
+    cfg.OUTPUT_DIR = './output/faster-rcnn/r50-fpn-3x/nektar/test2/'
 
-
-    cfg.TEST.EVAL_PERIOD = 1000
+    cfg.TEST.EVAL_PERIOD = 4000
     return cfg
 
 
@@ -83,29 +79,59 @@ class CocoTrainer(DefaultTrainer):
         return COCOEvaluator(dataset_name, cfg, False, output_folder)
 
 
-
-if __name__ == '__main__':
-    # os.makedirs(cfg.OUTPUT_DIR, exist_ok=True)
-    # # trainer = DefaultTrainer(cfg)
-    # # trainer.resume_or_load(resume=False)
-    # # trainer.train()
-    cfg = custom_config(200)
-    # run_name = 'test1'
+def train_model(config, change_default_output_dir=False, general_output_dir='./output/', output_dir=None,
+                run_name=None):
+    cfg = config
+    if change_default_output_dir:
+        cfg.OUTPUT_DIR = os.path.join(general_output_dir, output_dir)
+    if run_name is not None:
+        cfg.OUTPUT_DIR = os.path.join(cfg.OUTPUT_DIR, run_name)
+    else:
+        cfg.OUTPUT_DIR = os.path.join(cfg.OUTPUT_DIR, 'test' + os.listdir(cfg.OUTPUT_DIR).__len__() + '/')
     os.makedirs(cfg.OUTPUT_DIR, exist_ok=True)
     trainer = CocoTrainer(cfg)
     trainer.build_evaluator(cfg, "my_dataset_val", output_folder=cfg.OUTPUT_DIR)
     trainer.resume_or_load(resume=False)
     trainer.train()
-    # torch.save(trainer.model, cfg.OUTPUT_DIR  +'checkpoint.pth')
-    checkpointer = DetectionCheckpointer(trainer.model, save_dir=cfg.OUTPUT_DIR)
+
+
+def prediction(num_classes=8, num_images=10, model_path=None, model_name=None, output_dir='images/', show_flag=False):
+    cfg = custom_config(num_classes, weight_path=os.path.join(model_path, model_name))
+    cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.5  # set the testing threshold for this model
+    my_dataset_test_metadata = MetadataCatalog.get("my_dataset_val")
+    dataset_dicts = DatasetCatalog.get("my_dataset_val")
+    output_dir = os.path.join(model_path, output_dir)
+    os.makedirs(output_dir, exist_ok=True)
+    predictor = DefaultPredictor(cfg)
+    for i, d in enumerate(random.sample(dataset_dicts, num_images)):
+        im = cv2.imread(d["file_name"])
+        outputs = predictor(im)
+        v = Visualizer(im[:, :, ::-1],
+                       metadata=my_dataset_test_metadata,
+                       scale=0.8,
+                       instance_mode=ColorMode.IMAGE_BW
+                       )
+        v = v.draw_instance_predictions(outputs["instances"].to("cpu"))
+        plt.figure(figsize=(20, 30))
+
+        plt.imshow(v.get_image()[:, :, ::-1])
+        plt.savefig(os.path.join(output_dir, f'prediction{i}.png'))
+        if show_flag:
+            plt.show()
+
+
+if __name__ == '__main__':
+
+    # config = custom_config(8)
+    # run_name = 'test1'
+    # train_model(config, change_default_output_dir=True, general_output_dir='./output/',
+    #             ourput_dir='faster-rcnn/r50-fpn-3x/nektar/')
 
 
     # Prediction
-    # cfg = custom_config(200, weight_path=os.path.join('./output/', "model_final.pth"))
-    # cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.5  # set the testing threshold for this model
-    # my_dataset_test_metadata = MetadataCatalog.get("my_dataset_val")
-    # dataset_dicts = DatasetCatalog.get("my_dataset_val")
-    # predictor = DefaultPredictor(cfg)
+
+    prediction(num_classes=8, num_images=10, model_path='./output/faster-rcnn/r50-fpn-3x/nektar/test2/',
+               model_name="model_final.pth")
     # for name in os.listdir('../../../datasets/DFG/model_testing'):
     #     im = cv2.imread(os.path.join('../../../datasets/DFG/model_testing', name))
     #     outputs = predictor(im)
@@ -130,4 +156,3 @@ if __name__ == '__main__':
     # cv2.waitKey(0)
     # cv2.destroyAllWindows()
     # plt.imsave(os.path.join(os.path.join(cfg.OUTPUT_DIR, 'visualization'), 'test_img' + '.png'), img)
-
