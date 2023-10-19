@@ -20,7 +20,7 @@ def only_sign_annotations():
         json.dump(data, out_F)
 
 
-files = ['tracka1_signs', 'trackb1_signs', 'trackb3_signs', 'trackc1_signs']
+
 
 
 def combine_tracks(address, files=[]):
@@ -76,8 +76,8 @@ def train_test_split(json_file='', images='', percentage=0.1):
     with open(json_file.replace('.json', '_test.json'), 'w') as f:
         json.dump(test_data, f)
 
-
-# combine_tracks('../../../datasets/Yellowstone ATS/Annotations/',files)
+files = ['instances_default_td4', 'instances_default_td5', 'instances_default_tdc2', 'instances_default_ts1']
+combine_tracks('../../../datasets/Pavement Crack Detection/DSPS23 Pavement/Track 1 Crack Type/training_data/Annotations/',files)
 # only_sign_annotations()
-train_test_split(json_file='../../../datasets/Yellowstone ATS/Annotations/combined_annotations.json',
-                 images='../../../datasets/Yellowstone ATS/Images')
+# train_test_split(json_file='../../../datasets/Pavement Crack Detection/Crack500-Forest Annotated/Annotations/instances_default.json',
+#                  images='../../../datasets/Pavement Crack Detection/Crack500-Forest Annotated/Images', percentage=0.2)

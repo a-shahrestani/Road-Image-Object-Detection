@@ -4,6 +4,7 @@ import detectron2
 import gaps_dataset.gaps
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.utils.logger import setup_logger
+import glob
 
 setup_logger()
 import cv2
@@ -23,11 +24,14 @@ from detectron2.evaluation import COCOEvaluator
 
 # Our dataset is in coco format, so we can use the coco api to load it
 register_coco_instances("my_dataset_train", {},
-                        "../../../datasets/Yellowstone ATS/Annotations/combined_annotations_train.json",
-                        "../../../datasets/Yellowstone ATS/Images/train")
+                        "../../../datasets/Pavement Crack Detection/Crack500-Forest Annotated/Annotations/instances_default_train.json",
+                        "../../../datasets/Pavement Crack Detection/Crack500-Forest Annotated/Images/Train")
+# register_coco_instances("my_dataset_val", {},
+#                         "../../../datasets/DSPS23 Pavement/Task 1 Crack Type/training_data/td5/annotations/instances_default.json",
+#                         "../../../datasets/DSPS23 Pavement/Task 1 Crack Type/training_data/td5/images")
 register_coco_instances("my_dataset_val", {},
-                        "../../../datasets/Yellowstone ATS/Annotations/combined_annotations_test.json",
-                        "../../../datasets/Yellowstone ATS/Images/test")
+                        "../../../datasets/Pavement Crack Detection/Crack500-Forest Annotated/Annotations/instances_default_test.json",
+                        "../../../datasets/Pavement Crack Detection/Crack500-Forest Annotated/Images/Test")
 # register_coco_instances("my_dataset_test", {}, "/content/test/_annotations.coco.json", "/content/test")
 print(os.getcwd())
 # visualize training data
@@ -63,7 +67,7 @@ def custom_config(num_classes, weight_path=None):
     # cfg.SOLVER.GAMMA = 0.05
 
     cfg.INPUT.MIN_SIZE_TRAIN = (800,)
-    cfg.OUTPUT_DIR = './output/faster-rcnn/r50-fpn-3x/DSPS23/test1/'
+    cfg.OUTPUT_DIR = './output/faster-rcnn/r50-fpn-3x/Crack500-Forest/test1/'
 
     cfg.TEST.EVAL_PERIOD = 4000
     return cfg
@@ -96,11 +100,16 @@ def train_model(config, change_default_output_dir=False, general_output_dir='./o
     trainer.train()
 
 
-def prediction(num_classes=8, num_images=10, model_path=None, model_name=None, output_dir='images/', show_flag=False):
+def prediction(num_classes=8, num_images=10, model_path=None, model_name=None, output_dir='images/', show_flag=False,
+               val_flag=True):
     cfg = custom_config(num_classes, weight_path=os.path.join(model_path, model_name))
     cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.5  # set the testing threshold for this model
-    my_dataset_test_metadata = MetadataCatalog.get("my_dataset_val")
-    dataset_dicts = DatasetCatalog.get("my_dataset_val")
+    if val_flag:
+        my_dataset_metadata = MetadataCatalog.get("my_dataset_val")
+        dataset_dicts = DatasetCatalog.get("my_dataset_val")
+    else:
+        my_dataset_metadata = MetadataCatalog.get("my_dataset_train")
+        dataset_dicts = DatasetCatalog.get("my_dataset_train")
     output_dir = os.path.join(model_path, output_dir)
     os.makedirs(output_dir, exist_ok=True)
     predictor = DefaultPredictor(cfg)
@@ -108,7 +117,7 @@ def prediction(num_classes=8, num_images=10, model_path=None, model_name=None, o
         im = cv2.imread(d["file_name"])
         outputs = predictor(im)
         v = Visualizer(im[:, :, ::-1],
-                       metadata=my_dataset_test_metadata,
+                       metadata=my_dataset_metadata,
                        scale=0.8,
                        instance_mode=ColorMode.IMAGE_BW
                        )
@@ -121,20 +130,54 @@ def prediction(num_classes=8, num_images=10, model_path=None, model_name=None, o
             plt.show()
 
 
+def predict_outside_dataset(num_classes=8, model_path=None, model_name=None, output_dir='images/',
+                            show_flag=False, image_dir=None, file_format = 'jpg'):
+    cfg = custom_config(num_classes, weight_path=os.path.join(model_path, model_name))
+    cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.5  # set the testing threshold for this model
+    my_dataset_metadata = MetadataCatalog.get("my_dataset_train")
+    dataset_dicts = DatasetCatalog.get("my_dataset_train")
+    output_dir = os.path.join(model_path, output_dir)
+    os.makedirs(output_dir, exist_ok=True)
+    predictor = DefaultPredictor(cfg)
+    for i, d in enumerate(glob.glob(f'{image_dir}/*.{file_format}')):
+        im = cv2.imread(d)
+        outputs = predictor(im)
+        v = Visualizer(im[:, :, ::-1],
+                       metadata=my_dataset_metadata,
+                       scale=0.8,
+                       instance_mode=ColorMode.IMAGE_BW
+                       )
+        v = v.draw_instance_predictions(outputs["instances"].to("cpu"))
+        plt.figure(figsize=(20, 30))
+
+        plt.imshow(v.get_image()[:, :, ::-1])
+        plt.savefig(os.path.join(output_dir, f'prediction{i}.png'))
+
+        if show_flag:
+            plt.show()
+        plt.close()
+
 if __name__ == '__main__':
-
     config = custom_config(7)
-    run_name = 'test1'
-    train_model(config, change_default_output_dir=True, general_output_dir='./output/',
-                output_dir='faster-rcnn/r50-fpn-3x/Nektar/')
-
+    run_name = 'test4'
+    # train_model(config, change_default_output_dir=True, general_output_dir='./output/',
+    #             output_dir='faster-rcnn/r50-fpn-3x/Crack500-Forest/')
 
     # Prediction
 
-    prediction(num_classes=8, num_images=10, model_path='./output/faster-rcnn/r50-fpn-3x/Nektar/test2/',
-               model_name="model_final.pth")
+    # prediction(num_classes=4, num_images=46, model_path='./output/faster-rcnn/r50-fpn-3x/Crack500-Forest/test3/',
+    #            model_name="model_0009999.pth", val_flag= True, output_dir='images_real_model_0009999/')
+
+    predict_outside_dataset(num_classes=7, model_path='./output/faster-rcnn/r50-fpn-3x/Crack500-Forest/test3/',
+                            model_name="model_final.pth",
+                            # image_dir='../../../datasets/Pavement Crack Detection/Crack500-Forest Annotated/Images/Test/Total',
+                            image_dir='../../../Data Generator/src/Conditional GAN/results/C_WGAN/run_2023-10-01_22-28-44/alligator',
+                            output_dir='images_test/',
+                            file_format='png')
+    # predictor = DefaultPredictor(config)
     # for name in os.listdir('../../../datasets/DFG/model_testing'):
     #     im = cv2.imread(os.path.join('../../../datasets/DFG/model_testing', name))
+    #
     #     outputs = predictor(im)
     #     v = Visualizer(im[:, :, ::-1],
     #                    metadata=my_dataset_test_metadata,

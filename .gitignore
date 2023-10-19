@@ -1,2 +1,10 @@
 /venv/
 /.idea/
+/src/Crack500-Forest/output/
+/src/Crack500-Forest/coco_eval/
+/src/DSPS23/coco_eval/
+/src/DSPS23/output/
+/src/DFG/coco_eval/
+/src/DFG/output/
+/src/Nektar/coco_eval/
+/src/Nektar/output/
