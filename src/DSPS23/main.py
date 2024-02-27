@@ -165,12 +165,12 @@ if __name__ == '__main__':
 
     # Prediction
 
-    prediction(num_classes=7, num_images=84, model_path='./output/faster-rcnn/r50-fpn-3x/DSPS23/test3/',
-               model_name="model_final.pth", val_flag= True, output_dir='images_real/')
+    # prediction(num_classes=7, num_images=84, model_path='./output/faster-rcnn/r50-fpn-3x/DSPS23/test3/',
+    #            model_name="model_final.pth", val_flag= True, output_dir='images_real/')
 
-    # predict_outside_dataset(num_classes=7, model_path='../Nektar/output/faster-rcnn/r50-fpn-3x/DSPS23/test1/',
-    #                         model_name="model_final.pth",
-    #                         image_dir='../../../datasets/nektar/Pavement Crack/TRK 700 NEO - Pavement Cameras')
+    predict_outside_dataset(num_classes=7, model_path='./output/faster-rcnn/r50-fpn-3x/DSPS23/test3/',
+                            model_name="model_final.pth",
+                            image_dir='../../../datasets/Pavement Crack Detection/DSPS23 Pavement/Task 1 Crack Type/training_data/Total/test')
     # predictor = DefaultPredictor(config)
     # for name in os.listdir('../../../datasets/DFG/model_testing'):
     #     im = cv2.imread(os.path.join('../../../datasets/DFG/model_testing', name))

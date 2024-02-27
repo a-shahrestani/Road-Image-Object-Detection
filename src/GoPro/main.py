@@ -128,11 +128,12 @@ def prediction_new_images(num_classes=8, num_images=10, model_path=None, data_pa
     cfg = custom_config(num_classes, weight_path=os.path.join(model_path, model_name))
     cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.5  # set the testing threshold for this model
     my_dataset_test_metadata = MetadataCatalog.get("my_dataset_val")
+    dataset_dicts = DatasetCatalog.get("my_dataset_val")
     if output_dir is None:
         output_dir = os.path.join(model_path, 'images/')
     os.makedirs(output_dir, exist_ok=True)
     predictor = DefaultPredictor(cfg)
-    for i,name in enumerate(os.listdir(data_path)):
+    for i, name in enumerate(os.listdir(data_path)):
         im = cv2.imread(os.path.join(data_path, name))
         outputs = predictor(im)
         v = Visualizer(im[:, :, ::-1],
@@ -147,7 +148,7 @@ def prediction_new_images(num_classes=8, num_images=10, model_path=None, data_pa
         plt.savefig(os.path.join(output_dir, f'prediction{i}.png'))
         if show_flag:
             plt.show()
-
+        plt.close()
 
 if __name__ == '__main__':
     config = custom_config(7)
@@ -160,9 +161,10 @@ if __name__ == '__main__':
     # prediction(num_classes=8, num_images=10, model_path='./output/faster-rcnn/r50-fpn-3x/Nektar/test2/',
     #            model_name="model_final.pth", output_dir='../GoPro/output/test1/images/', show_flag=False)
 
-    prediction_new_images(num_classes=8, num_images=10, model_path='./output/faster-rcnn/r50-fpn-3x/Nektar/test2/',
-                          data_path="../../../datasets/GoPro/GX010002",
-                          model_name="model_final.pth", output_dir='../GoPro/output/test1/images/', show_flag=False)
+    prediction_new_images(num_classes=8, num_images=10,
+                          model_path='../nektar/output/faster-rcnn/r50-fpn-3x/Nektar/test2/',
+                          data_path="../../../datasets/GoPro/GX010005",
+                          model_name="model_final.pth", output_dir='./output/test1/images5/', show_flag=False)
     # for name in os.listdir('../../../datasets/DFG/model_testing'):
     #     im = cv2.imread(os.path.join('../../../datasets/DFG/model_testing', name))
     #     outputs = predictor(im)

@@ -1,3 +1,4 @@
+import copy
 import os
 import random
 import torch
@@ -22,12 +23,12 @@ manualSeed = 999
 random.seed(manualSeed)
 torch.manual_seed(manualSeed)
 
-data_root = '../../../datasets/Pavement Crack Detection/Crack500-Forest Annotated/Images/class_seperated/augmented/'
+data_root = '../../../datasets/Pavement Crack Detection/Crack500-Forest Annotated/Images/'
 image_size = 256
 batch_size = 16
 lr = 0.0002
 beta1 = 0.5
-num_epochs = 500
+num_epochs = 2000
 
 
 def custom_collate(batch):
@@ -38,6 +39,114 @@ def custom_collate(batch):
 
     # Return a tuple containing a single tensor with all the data samples and a list of labels
     return torch.stack(data), labels
+
+
+class EarlyStopping:
+    def __init__(self, patience=100, save_path=''):
+        self.patience = patience
+        self.counter = 0
+        self.best_accuracy = 0
+        self.save_path = save_path
+        self.best_epoch = -1
+
+    def __call__(self, epoch, model, accuracy):
+        if accuracy > self.best_accuracy:
+            self.best_accuracy = accuracy
+            self.counter = 0
+            self.best_epoch = epoch
+            torch.save(model.state_dict(), self.save_path + 'best_model.pth')
+        else:
+            self.counter += 1
+            if self.counter >= self.patience:
+                print(f"Early stopping at epoch {epoch}. Loading the best model from epoch {self.best_epoch}.")
+                model.load_state_dict(torch.load(self.save_path + 'best_model.pth'))
+                return True  # Stop training
+        return False  # Continue training
+
+
+def train_early_stopping(model, train_loader, valid_loader, lr, beta1, num_epochs, save_model=True, save_path='',
+                         save_interval=10, early_stopping_flag=True, patience=100, use_best_accuracy_model=True):
+    with open(save_path + 'run_info.txt', 'w') as f:
+        f.write(f'Learning rate: {lr}\n')
+        f.write(f'Beta1: {beta1}\n')
+        f.write(f'Number of epochs: {num_epochs}\n')
+
+    # Initialize model, optimizer, and criterion
+    optimizerG = torch.optim.Adam(model.parameters(), lr=lr, betas=(beta1, 0.999))
+    criterion = torch.nn.CrossEntropyLoss()
+
+    # Initialize EarlyStopping callback
+    early_stopping = EarlyStopping(patience=patience, save_path=save_path)
+    best_accuracy = 0
+    best_epoch = 0
+    # Training loop
+    epoch_losses = []
+    for epoch in range(num_epochs):
+        batch_losses = []
+        for i, data in enumerate(train_loader):
+            images, labels = data['data'], data['label']
+            images = images.to(device)
+            labels = labels.to(device)
+
+            optimizerG.zero_grad()
+            outputs = model(images)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizerG.step()
+            batch_losses.append(loss.item())
+            # if i % 10 == 0:
+            #     print('[%d/%d][%d/%d]\tLoss: %.8f'
+            #           % (epoch, num_epochs, i, len(train_loader), loss.item()))
+        average_loss = np.mean(batch_losses)
+        print(f'Epoch {epoch} average loss: {average_loss}')
+        epoch_losses.append(average_loss)
+        # Validation accuracy calculation
+        correct = 0
+        total = 0
+        with torch.no_grad():
+            for data in valid_loader:
+                model.eval()
+                images, labels = data['data'], data['label']
+                images = images.to(device)
+                labels = labels.to(device)
+
+                outputs = model(images)
+                # _, predicted = torch.max(outputs.data, 1)
+                probs = torch.nn.functional.softmax(outputs, dim=1)
+                predicted_classes = torch.argmax(probs, dim=1)
+                total += labels.size(0)
+                # correct += (predicted == labels).sum().item()
+                correct += (predicted_classes == labels.long()).sum().item()
+            model.train()
+        accuracy = 100 * correct / total
+        print('Accuracy of the network on the validation images: %d %%' % accuracy)
+
+        if accuracy > best_accuracy:
+            best_accuracy = accuracy
+            best_epoch = epoch
+            torch.save(model.state_dict(), save_path + 'best_epoch_model.pth')
+            print(f'Best model so far at epoch {best_epoch}. Accuracy: {best_accuracy}')
+
+        # Save model
+        if save_model and epoch % save_interval == 0:
+            torch.save(model.state_dict(), save_path + 'resnet_model_epoch' + str(epoch) + '.pth')
+
+        # Check for early stopping
+        if early_stopping(epoch, model, accuracy) and early_stopping_flag:
+            break  # Stop training
+
+    with open(save_path + 'epoch_losses.txt', 'w') as ff:
+        for loss in epoch_losses:
+            ff.write(f'{loss}\n')
+        ff.close()
+    if use_best_accuracy_model:
+        print(f'Best model so far at epoch {best_epoch}. Accuracy: {best_accuracy}')
+        print(f'Loading the best model from epoch {best_epoch}.')
+        model.load_state_dict(torch.load(save_path + 'best_epoch_model.pth'))
+    # Save final model
+    if save_model:
+        torch.save(model.state_dict(), save_path + 'resnet_model_final.pth')
+    return model
 
 
 def train(train_loader, valid_loader, lr, beta1, num_epochs, save_model=True, save_path='', save_interval=10):
@@ -97,7 +206,7 @@ def class_prediction(model, model_path, input_images, device='cpu'):
 
 def image_class_prediction(model, model_path, input_images, image_names, device='cpu', save_flag=False, save_path='',
                            evaluate_predictions=True, labels=[], output_name='predictions',
-                           classes=['alligator', 'block', 'longitudinal', 'transverse']):
+                           classes=None):
     model.load_state_dict(torch.load(model_path))
     model.eval()
     with torch.no_grad():
@@ -130,15 +239,20 @@ def image_class_prediction(model, model_path, input_images, image_names, device=
         if save_flag:
             df.to_csv(save_path + f'{output_name}.csv')
             with open(save_path + 'metrics.txt', 'w') as f:
-                f.write(f'Accuracy of the network on the test images: {accuracy_score(labels, predicted_classes) * 100}\n')
-                f.write(f'Recall of the network on the test images: {recall_score(labels, predicted_classes, average="macro") * 100}\n')
-                f.write(f'Precision of the network on the test images: {precision_score(labels, predicted_classes, average="macro") * 100}\n')
-                f.write(f'F1 score of the network on the test images: {f1_score(labels, predicted_classes, average="macro") * 100}\n')
-                f.write(f'Confusion matrix of the network on the test images: \n {confusion_matrix(labels, predicted_classes)}\n')
+                f.write(
+                    f'Accuracy of the network on the test images: {accuracy_score(labels, predicted_classes) * 100}\n')
+                f.write(
+                    f'Recall of the network on the test images: {recall_score(labels, predicted_classes, average="macro") * 100}\n')
+                f.write(
+                    f'Precision of the network on the test images: {precision_score(labels, predicted_classes, average="macro") * 100}\n')
+                f.write(
+                    f'F1 score of the network on the test images: {f1_score(labels, predicted_classes, average="macro") * 100}\n')
+                f.write(
+                    f'Confusion matrix of the network on the test images: \n {confusion_matrix(labels, predicted_classes)}\n')
         return df
 
 
-def index_images(directory_path, classes, transform_func=None):
+def index_images(directory_path, classes, transform_func=None, single_label=None):
     images = []  # To store the opened images
     files = []  # To store the class indices
     for class_name in classes:
@@ -155,7 +269,10 @@ def index_images(directory_path, classes, transform_func=None):
         transformed_images = [transform_func(image) for image in class_images]
         images.append(transformed_images)
         files.append(class_files)
-    file_classes = np.concatenate([np.full(len(files[i]), i) for i in range(len(files))])
+    if single_label is not None:
+        file_classes = np.full(len(files[0]), single_label)
+    else:
+        file_classes = np.concatenate([np.full(len(files[i]), i) for i in range(len(files))])
     images = np.array([item for row in images for item in row])
 
     files = [item for row in files for item in row]
@@ -207,7 +324,8 @@ def split_data_prev(train_files, valid_files):
 def split_data(images, files, file_classes, new_split=True, test_size=0.2, random_state=manualSeed,
                train_split_address='', valid_split_address=''):
     if new_split:
-        train_indices, valid_indices = train_test_split(np.arange(len(images)), test_size=test_size, random_state=random_state,
+        train_indices, valid_indices = train_test_split(np.arange(len(images)), test_size=test_size,
+                                                        random_state=random_state,
                                                         stratify=file_classes)
     else:
         train_files, valid_files = get_previous_split(train_split_address, valid_split_address)
@@ -239,7 +357,8 @@ class CustomDataset(Dataset):
 
 
 if __name__ == '__main__':
-    run_address = './output/classification/ResNet18/test7'
+    # run_address = './output/classification/ResNet18/augmented_WGAN/test4'
+    run_address = './output/classification/ResNet18/test24'
     if not os.path.exists(run_address):
         os.makedirs(run_address)
     transform = transforms.Compose([
@@ -249,8 +368,10 @@ if __name__ == '__main__':
         transforms.ToTensor(),
         transforms.Normalize((0.5), (0.5))]  # changed to a single channel
     )
-    classes_name = ['alligator', 'block', 'longitudinal', 'transverse']
-    images, files, file_classes = index_images(data_root, classes_name, transform_func=transform)
+    classes_name = ['alligator', 'longitudinal', 'transverse']
+    # classes_name = ['alligator','block', 'longitudinal', 'transverse']
+    images, files, file_classes = index_images(os.path.join(data_root, 'class_seperated'), classes_name,
+                                               transform_func=transform)
     df = pd.DataFrame(columns=['image_name', 'class'], data={'image_name': files, 'class': file_classes})
     df.to_csv(f'{run_address}/labels_og.csv')
     train_data, train_labels, train_files, valid_data, valid_labels, valid_files = split_data(images, files,
@@ -259,6 +380,15 @@ if __name__ == '__main__':
                                                                                               new_split=True,
                                                                                               train_split_address=f'{run_address}/train_files.txt',
                                                                                               valid_split_address=f'{run_address}/valid_files.txt')
+
+    # Adding more images to the block validation data
+    # new_images, new_files, new_file_classes = index_images(
+    #     '../../../datasets/Pavement Crack Detection/Crack500-Forest Annotated/Images/', ['block'],
+    #     transform_func=transform, single_label=classes_name.index('block'))
+    # valid_data = np.concatenate((valid_data, new_images))
+    # valid_labels = np.concatenate((valid_labels, new_file_classes))
+    # valid_files = np.concatenate((valid_files, new_files))
+
     with open(f'{run_address}/train_files.txt', 'w') as f:
         for item in train_files:
             f.write("%s\n" % item)
@@ -266,15 +396,16 @@ if __name__ == '__main__':
         for item in valid_files:
             f.write("%s\n" % item)
 
-    # Data augmentation
-    for class_name in classes_name:
-        augmented_data = augment_class(num_images=200, class_name=class_name,
-                                       class_path=os.path.join(data_root, f'augmented {class_name}'),
-                                       transform_func=transform)
-        train_data = np.concatenate((train_data, augmented_data))
-        train_labels = np.concatenate((train_labels, np.full(len(augmented_data), classes_name.index(class_name))))
+    # # Data augmentation
+    # for class_name in classes_name:
+    #     augmented_data = augment_class(num_images=200, class_name=class_name,
+    #                                    class_path=os.path.join(data_root, f'augmented/WGAN_GP/{class_name}'),
+    #                                    transform_func=transform)
+    #
+    #     train_data = np.concatenate((train_data, augmented_data))
+    #     train_labels = np.concatenate((train_labels, np.full(len(augmented_data), classes_name.index(class_name))))
 
-    num_classes = 4
+    num_classes = len(classes_name)
 
     resnet_model = models.resnet18(pretrained=False)
     resnet_model.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3,
@@ -289,11 +420,16 @@ if __name__ == '__main__':
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=batch_size, shuffle=True)
 
-    train(train_loader=train_loader, valid_loader=valid_loader, lr=lr, beta1=beta1, num_epochs=num_epochs,
-          save_model=True,
-          save_path=f'{run_address}/', save_interval=100)
+    best_resnet_model = train_early_stopping(model=resnet_model, train_loader=train_loader, valid_loader=valid_loader,
+                                             lr=lr,
+                                             beta1=beta1,
+                                             num_epochs=num_epochs,
+                                             save_model=True,
+                                             save_path=f'{run_address}/', save_interval=100, patience=300,
+                                             early_stopping_flag=False,
+                                             use_best_accuracy_model=True)
 
     image_class_prediction(model=resnet_model, model_path=f'{run_address}/resnet_model_final.pth', device=device,
                            image_names=valid_files, input_images=valid_data, labels=valid_labels, save_flag=True,
                            save_path=f'{run_address}/',
-                           evaluate_predictions=True)
+                           evaluate_predictions=True, classes=classes_name)
