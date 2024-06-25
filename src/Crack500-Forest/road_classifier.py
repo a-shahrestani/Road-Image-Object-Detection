@@ -2,6 +2,10 @@ import pandas as pd
 import cv2
 import numpy as np
 import os
+from pillow_heif import register_heif_opener
+from PIL import Image
+
+register_heif_opener()
 
 
 def image_splitter(img, length, height):
@@ -25,17 +29,26 @@ def reconstruct_image(pieces, shapes, length, height):
     return img
 
 
-def large_scale_splitter(source_directory, length, height, num_samples=500, save_directory='results'):
+def large_scale_splitter(source_directory, length, height, num_samples=500, save_directory='results', format='jpg',
+                         resize=False, resize_degree=4):
     # we will use the image_splitter function to split the image into 256x256 pieces
     # we first have to read X number of images the images from the directory
     images = []
     image_names = os.listdir(source_directory)
     if num_samples > len(image_names):
         num_samples = len(image_names)
-    for i in range(num_samples):
-        images.append(cv2.imread(f'{source_directory}/{image_names[i]}',
-                                 cv2.IMREAD_GRAYSCALE))
-    for i,image in enumerate(images):
+    if format != 'HEIC':
+        for i in range(num_samples):
+            images.append(cv2.imread(f'{source_directory}/{image_names[i]}',
+                                     cv2.IMREAD_GRAYSCALE))
+    else:
+        for i in range(num_samples):
+            images.append(np.array(Image.open(f'{source_directory}/{image_names[i]}').convert('L'))
+                          )
+
+    for i, image in enumerate(images):
+        if resize:
+            image = cv2.resize(image, (image.shape[1] // resize_degree, image.shape[0] // resize_degree))
         shapes, pieces = image_splitter(image, length, height)
         image_name = image_names[i].split('.')[0]
         for i, split in enumerate(pieces):
@@ -51,4 +64,5 @@ def large_scale_splitter(source_directory, length, height, num_samples=500, save
 # img = reconstruct_image(pieces, shapes, 256, 256)
 
 
-large_scale_splitter('input', 256, 256, num_samples=20, save_directory='results')
+large_scale_splitter('input/Additional', 256, 256, num_samples=20, save_directory='results/Additional', format='HEIC',
+                     resize=True, resize_degree=2)
