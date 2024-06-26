@@ -6,6 +6,7 @@ import torchvision.models as models
 import torch.utils.data
 import torchvision.datasets as dset
 import torchvision.transforms as transforms
+from matplotlib import pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix
 from torch import nn
@@ -15,6 +16,7 @@ from PIL import Image
 from torch.utils.data import Dataset
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 from pillow_heif import register_heif_opener
+import seaborn as sns
 
 register_heif_opener()
 # Set random seed for reproducibility
@@ -132,8 +134,9 @@ def train_early_stopping(model, train_loader, valid_loader, lr, beta1, num_epoch
             torch.save(model.state_dict(), save_path + 'resnet_model_epoch' + str(epoch) + '.pth')
 
         # Check for early stopping
-        if early_stopping(epoch, model, accuracy) and early_stopping_flag:
-            break  # Stop training
+        if early_stopping_flag:
+            if early_stopping(epoch, model, accuracy):
+                break  # Stop training
 
     with open(save_path + 'epoch_losses.txt', 'w') as ff:
         for loss in epoch_losses:
@@ -209,7 +212,7 @@ def image_class_prediction(model, model_path, input_images, image_names, device=
                            classes=None):
     model.load_state_dict(torch.load(model_path))
     model.eval()
-    with torch.no_grad():
+    with (torch.no_grad()):
         # images = input_images.to(device)
         images = torch.stack([tensor for tensor in input_images], dim=0).to(device)
         outputs = model(images)
@@ -236,6 +239,35 @@ def image_class_prediction(model, model_path, input_images, image_names, device=
         df = pd.DataFrame({'image_name': image_names,
                            'class': [classes[i] for i in predicted_classes],
                            'class_name': [classes[i] for i in labels]})
+
+
+        # Create confusion matrix
+        conf_mat = confusion_matrix(labels, predicted_classes)
+
+        # Setting up the figure size and DPI for clarity
+        fig, ax = plt.subplots(figsize=(12, 8), dpi=300)  # Adjust figsize and dpi as needed
+
+        # Create heatmap
+        sns.set(font_scale=1.5)  # Increase font scale for better readability
+        heatmap = sns.heatmap(conf_mat, annot=True, cmap='Greens', square=True, cbar=False,
+                              annot_kws={'size': 20},  # Increase annotation text size
+                              xticklabels=['alligator', 'longitudinal', 'transverse'],
+                              yticklabels=['alligator', 'longitudinal', 'transverse'],
+                              ax=ax)
+        # Setting title and labels with adjusted sizes
+        heatmap.tick_params(axis='x', labelsize=16)
+        heatmap.tick_params(axis='y', labelsize=16)
+        heatmap.set_title('ResNet18 (C-WGAN-GP Augmentation - Best Epoch) Confusion Matrix', pad=30)
+        heatmap.xaxis.tick_top()  # x axis on top
+        heatmap.xaxis.set_label_position('top')
+        # Adjust layout
+        plt.tight_layout()  # Automatically adjust subplot params
+        # Save the figure
+        fig.savefig(os.path.join(save_path, 'confusion_matrix.png'))
+
+        # Show plot
+        plt.show()
+
         if save_flag:
             df.to_csv(save_path + f'{output_name}.csv')
             with open(save_path + 'metrics.txt', 'w') as f:
@@ -357,8 +389,10 @@ class CustomDataset(Dataset):
 
 
 if __name__ == '__main__':
-    # run_address = './output/classification/ResNet18/augmented_WGAN/test4'
-    run_address = './output/classification/ResNet18/test24'
+    run_address = './output/classification/ResNet18/augmented_CWGAN/test2'
+    # run_address = './output/classification/ResNet18/augmented_WGAN/test7'
+    # run_address = './output/classification/ResNet18/test24'
+    # run_address = './output/classification/ResNet18/detection/test2'
     if not os.path.exists(run_address):
         os.makedirs(run_address)
     transform = transforms.Compose([
@@ -368,8 +402,9 @@ if __name__ == '__main__':
         transforms.ToTensor(),
         transforms.Normalize((0.5), (0.5))]  # changed to a single channel
     )
-    classes_name = ['alligator', 'longitudinal', 'transverse']
-    # classes_name = ['alligator','block', 'longitudinal', 'transverse']
+    original_classes_name = ['alligator', 'longitudinal', 'transverse']
+    # classes_name = ['alligator', 'longitudinal', 'transverse','no_crack']
+    classes_name = ['alligator','longitudinal', 'transverse']
     images, files, file_classes = index_images(os.path.join(data_root, 'class_seperated'), classes_name,
                                                transform_func=transform)
     df = pd.DataFrame(columns=['image_name', 'class'], data={'image_name': files, 'class': file_classes})
@@ -396,14 +431,14 @@ if __name__ == '__main__':
         for item in valid_files:
             f.write("%s\n" % item)
 
-    # # Data augmentation
-    # for class_name in classes_name:
-    #     augmented_data = augment_class(num_images=200, class_name=class_name,
-    #                                    class_path=os.path.join(data_root, f'augmented/WGAN_GP/{class_name}'),
-    #                                    transform_func=transform)
-    #
-    #     train_data = np.concatenate((train_data, augmented_data))
-    #     train_labels = np.concatenate((train_labels, np.full(len(augmented_data), classes_name.index(class_name))))
+    # Data augmentation
+    for class_name in original_classes_name:
+        augmented_data = augment_class(num_images=200, class_name=class_name,
+                                       class_path=os.path.join(data_root, f'augmented/C_WGAN_GP/{class_name}'),
+                                       transform_func=transform)
+
+        train_data = np.concatenate((train_data, augmented_data))
+        train_labels = np.concatenate((train_labels, np.full(len(augmented_data), classes_name.index(class_name))))
 
     num_classes = len(classes_name)
 
@@ -420,14 +455,14 @@ if __name__ == '__main__':
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=batch_size, shuffle=True)
 
-    best_resnet_model = train_early_stopping(model=resnet_model, train_loader=train_loader, valid_loader=valid_loader,
-                                             lr=lr,
-                                             beta1=beta1,
-                                             num_epochs=num_epochs,
-                                             save_model=True,
-                                             save_path=f'{run_address}/', save_interval=100, patience=300,
-                                             early_stopping_flag=False,
-                                             use_best_accuracy_model=True)
+    # best_resnet_model = train_early_stopping(model=resnet_model, train_loader=train_loader, valid_loader=valid_loader,
+    #                                          lr=lr,
+    #                                          beta1=beta1,
+    #                                          num_epochs=num_epochs,
+    #                                          save_model=True,
+    #                                          save_path=f'{run_address}/', save_interval=100, patience=300,
+    #                                          early_stopping_flag=False,
+    #                                          use_best_accuracy_model=True)
 
     image_class_prediction(model=resnet_model, model_path=f'{run_address}/resnet_model_final.pth', device=device,
                            image_names=valid_files, input_images=valid_data, labels=valid_labels, save_flag=True,
