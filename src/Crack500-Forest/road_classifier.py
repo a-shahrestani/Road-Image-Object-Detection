@@ -53,9 +53,9 @@ def detect_cracks_fn(input_images, model_path, num_classes=4, num_shown_classes=
         visualized_images = []
         for i in range(len(input_images)):
             predicted_images.append(
-                np.full((image_length, image_height), predicted_classes[i] * 255 // len(classes_name)))
+                np.full((image_length, image_height), predicted_classes[i] * 255 // num_classes))
             visualized_images.append(
-                np.full((image_length, image_height), visualized_classes[i] * 255 // len(classes_name)))
+                np.full((image_length, image_height), visualized_classes[i] * 255 // num_shown_classes))
         return predicted_images, visualized_images
 
 
